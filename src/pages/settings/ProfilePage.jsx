@@ -7,6 +7,9 @@ import {
   useUpdateProfile,
   useChangePassword,
   useLogout,
+  fetchAccountDetails,
+  useAddAccountDetails,
+  useDeleteAccountDetails,
 } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
@@ -21,13 +24,19 @@ import {
 } from "@/components/ui/card";
 import { UserAvatar } from "@/components/ui/avatar";
 import { PageLoader } from "@/components/ui/helpers";
-import { LogOut, Shield, User } from "lucide-react";
+import { CreditCard, LogOut, Shield, User } from "lucide-react";
 
 const profileSchema = z.object({
   first_name: z.string().min(1, "Required"),
   last_name: z.string().min(1, "Required"),
   username: z.string().min(3, "At least 3 characters"),
   phone: z.string().optional(),
+});
+
+const accountSchema = z.object({
+  account_name: z.string().min(10, "At least 10 characters"),
+  account_number: z.string().min(10, "At least 11 characters"),
+  bank_name: z.string().min(4, "At least 4 characters"),
 });
 
 const passwordSchema = z
@@ -44,12 +53,18 @@ const passwordSchema = z
 export default function ProfilePage() {
   const { data: me, isLoading } = useMe();
   const user = useAuthStore((s) => s.user) || me;
+
   const { mutate: updateProfile, isPending: updating } = useUpdateProfile();
   const { mutate: changePassword, isPending: changingPwd } =
     useChangePassword();
+  const { mutate: addAccount, isPending: addingAccount } =
+    useAddAccountDetails();
+  const { mutate: deleteAccount, isPending: deletingAccount } =
+    useDeleteAccountDetails();
   const { mutate: logout } = useLogout();
 
   const profileForm = useForm({ resolver: zodResolver(profileSchema) });
+  const accountForm = useForm({ resolver: zodResolver(accountSchema) });
   const passwordForm = useForm({ resolver: zodResolver(passwordSchema) });
 
   useEffect(() => {
@@ -60,19 +75,38 @@ export default function ProfilePage() {
         username: user.username || "",
         phone: user.phone || "",
       });
+
+      const getAccount = async () => {
+        const data = await fetchAccountDetails(user.id);
+        if (data) {
+          accountForm.reset({
+            account_name: data.account_name || "",
+            account_number: data.account_number || "",
+            bank_name: data.bank_name || "",
+          });
+        }
+      };
+      getAccount();
     }
-  }, [user]);
+  }, [user, profileForm, accountForm]);
+
+  const handleDeleteAccount = () => {
+    if (window.confirm("Delete bank details?")) {
+      deleteAccount(user.id, {
+        onSuccess: () =>
+          accountForm.reset({
+            account_name: "",
+            account_number: "",
+            bank_name: "",
+          }),
+      });
+    }
+  };
 
   if (isLoading) return <PageLoader />;
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div>
-        <h1 className="page-title">Profile Settings</h1>
-        <p className="page-subtitle">Manage your account information</p>
-      </div>
-
-      {/* Profile card */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-4">
@@ -94,20 +128,14 @@ export default function ProfilePage() {
                 error={profileForm.formState.errors.first_name?.message}
                 required
               >
-                <Input
-                  {...profileForm.register("first_name")}
-                  error={!!profileForm.formState.errors.first_name}
-                />
+                <Input {...profileForm.register("first_name")} />
               </FormField>
               <FormField
                 label="Last name"
                 error={profileForm.formState.errors.last_name?.message}
                 required
               >
-                <Input
-                  {...profileForm.register("last_name")}
-                  error={!!profileForm.formState.errors.last_name}
-                />
+                <Input {...profileForm.register("last_name")} />
               </FormField>
             </div>
             <FormField
@@ -115,82 +143,110 @@ export default function ProfilePage() {
               error={profileForm.formState.errors.username?.message}
               required
             >
-              <Input
-                {...profileForm.register("username")}
-                error={!!profileForm.formState.errors.username}
-              />
-            </FormField>
-            <FormField label="Email address">
-              <Input
-                value={user?.email || ""}
-                disabled
-                className="bg-ink-50 text-ink-500"
-              />
+              <Input {...profileForm.register("username")} />
             </FormField>
             <FormField
-              label="Phone number"
+              label="Phone"
               error={profileForm.formState.errors.phone?.message}
             >
-              <Input
-                type="tel"
-                placeholder="+234 800 000 0000"
-                {...profileForm.register("phone")}
-              />
+              <Input type="tel" {...profileForm.register("phone")} />
             </FormField>
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end">
               <Button type="submit" variant="primary" loading={updating}>
-                <User className="h-4 w-4" /> Save changes
+                <User className="mr-2 h-4 w-4" /> Save changes
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
-      {/* Change password */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-ink-500" />
-            Change password
+            <CreditCard className="h-5 w-5" /> Bank Account
           </CardTitle>
-          <CardDescription>
-            Use a strong password with at least 8 characters
-          </CardDescription>
+          <CardDescription>Details for receiving payments</CardDescription>
         </CardHeader>
         <CardContent>
           <form
-            onSubmit={passwordForm.handleSubmit((d) => {
-              changePassword(d);
-              passwordForm.reset();
-            })}
+            onSubmit={accountForm.handleSubmit((d) => addAccount(d))}
             className="space-y-4"
           >
             <FormField
-              label="Current password"
+              label="Account Name"
+              error={accountForm.formState.errors.account_name?.message}
+              required
+            >
+              <Input {...accountForm.register("account_name")} />
+            </FormField>
+            <FormField
+              label="Account Number"
+              error={accountForm.formState.errors.account_number?.message}
+              required
+            >
+              <Input
+                type="text"
+                inputMode="numeric"
+                {...accountForm.register("account_number")}
+              />
+            </FormField>
+            <FormField
+              label="Bank Name"
+              error={accountForm.formState.errors.bank_name?.message}
+              required
+            >
+              <Input {...accountForm.register("bank_name")} />
+            </FormField>
+            <div className="flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleDeleteAccount}
+                loading={deletingAccount}
+              >
+                Delete
+              </Button>
+              <Button type="submit" variant="primary" loading={addingAccount}>
+                Save Account
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" /> Security
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={passwordForm.handleSubmit((d) => changePassword(d))}
+            className="space-y-4"
+          >
+            <FormField
+              label="Current Password"
               error={passwordForm.formState.errors.old_password?.message}
               required
             >
               <Input
                 type="password"
-                placeholder="••••••••"
                 {...passwordForm.register("old_password")}
-                error={!!passwordForm.formState.errors.old_password}
               />
             </FormField>
             <FormField
-              label="New password"
+              label="New Password"
               error={passwordForm.formState.errors.new_password?.message}
               required
             >
               <Input
                 type="password"
-                placeholder="At least 8 characters"
                 {...passwordForm.register("new_password")}
-                error={!!passwordForm.formState.errors.new_password}
               />
             </FormField>
             <FormField
-              label="Confirm new password"
+              label="Confirm New Password"
               error={
                 passwordForm.formState.errors.new_password_confirm?.message
               }
@@ -198,31 +254,22 @@ export default function ProfilePage() {
             >
               <Input
                 type="password"
-                placeholder="Repeat new password"
                 {...passwordForm.register("new_password_confirm")}
-                error={!!passwordForm.formState.errors.new_password_confirm}
               />
             </FormField>
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end">
               <Button type="submit" variant="primary" loading={changingPwd}>
-                Update password
+                Update Password
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
-      {/* Danger zone */}
       <Card className="border-rose-200">
-        <CardHeader>
-          <CardTitle className="text-rose-700">Sign out</CardTitle>
-          <CardDescription>
-            Sign out of your Akant account on this device
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <Button variant="destructive" onClick={() => logout()}>
-            <LogOut className="h-4 w-4" /> Sign out
+            <LogOut className="mr-2 h-4 w-4" /> Sign Out
           </Button>
         </CardContent>
       </Card>
