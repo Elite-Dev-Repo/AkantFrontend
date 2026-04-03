@@ -4,12 +4,15 @@ export const authApi = {
   register: (data) => api.post("/auth/register/", data),
   login: (data) => api.post("/auth/login/", data),
   logout: (refresh) => api.post("/auth/logout/", { refresh }),
+  refreshToken: (refresh) => api.post("/auth/token/refresh/", { refresh }),
   getMe: () => api.get("/users/me/"),
   updateMe: (data) => api.patch("/users/me/", data),
   changePassword: (data) => api.post("/users/change-password/", data),
 
-  // Account Details Endpoints
-  getAccountDetails: (id) => api.get(`/account_details/${id}/`),
-  addAccountDetails: (data) => api.post("/account_details/", data),
-  deleteAccountDetails: (id) => api.delete(`/account_details/${id}/`),
+  // Account details — served under /users/account-details/
+  getAccountDetails: () => api.get("/users/account-details/"),
+  createAccountDetails: (data) => api.post("/users/account-details/", data),
+  updateAccountDetails: (id, data) =>
+    api.patch(`/users/account-details/${id}/`, data),
+  deleteAccountDetails: (id) => api.delete(`/users/account-details/${id}/`),
 };

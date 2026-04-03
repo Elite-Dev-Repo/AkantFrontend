@@ -52,7 +52,7 @@ export default function Sidebar({ open, onClose }) {
         {/* Logo */}
         <div className="flex items-center gap-3 px-5 py-5 border-b border-ink-100">
           <div className="h-8 w-8 rounded-lg bg-brand-500 flex items-center justify-center shadow-sm shadow-brand-200">
-            <DollarSign className="h-4 w-4 text-white" strokeWidth={2.5} />
+            <p className="text-white text-[1.2em]">₦</p>
           </div>
           <span className="text-xl font-display font-bold text-ink-900 tracking-tight">
             Akant

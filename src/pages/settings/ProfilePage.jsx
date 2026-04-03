@@ -7,8 +7,8 @@ import {
   useUpdateProfile,
   useChangePassword,
   useLogout,
-  fetchAccountDetails,
-  useAddAccountDetails,
+  useAccountDetails,
+  useSaveAccountDetails,
   useDeleteAccountDetails,
 } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/authStore";
@@ -34,9 +34,9 @@ const profileSchema = z.object({
 });
 
 const accountSchema = z.object({
-  account_name: z.string().min(10, "At least 10 characters"),
-  account_number: z.string().min(10, "At least 11 characters"),
-  bank_name: z.string().min(4, "At least 4 characters"),
+  account_name: z.string().min(2, "Required"),
+  account_number: z.string().length(10, "Must be exactly 10 digits"),
+  bank_name: z.string().min(2, "Required"),
 });
 
 const passwordSchema = z
@@ -54,11 +54,14 @@ export default function ProfilePage() {
   const { data: me, isLoading } = useMe();
   const user = useAuthStore((s) => s.user) || me;
 
+  const { data: accountList } = useAccountDetails();
+  const existingAccount = Array.isArray(accountList) ? accountList[0] : null;
+
   const { mutate: updateProfile, isPending: updating } = useUpdateProfile();
   const { mutate: changePassword, isPending: changingPwd } =
     useChangePassword();
-  const { mutate: addAccount, isPending: addingAccount } =
-    useAddAccountDetails();
+  const { mutate: saveAccount, isPending: savingAccount } =
+    useSaveAccountDetails();
   const { mutate: deleteAccount, isPending: deletingAccount } =
     useDeleteAccountDetails();
   const { mutate: logout } = useLogout();
@@ -67,6 +70,7 @@ export default function ProfilePage() {
   const accountForm = useForm({ resolver: zodResolver(accountSchema) });
   const passwordForm = useForm({ resolver: zodResolver(passwordSchema) });
 
+  // Populate profile form
   useEffect(() => {
     if (user) {
       profileForm.reset({
@@ -75,24 +79,24 @@ export default function ProfilePage() {
         username: user.username || "",
         phone: user.phone || "",
       });
-
-      const getAccount = async () => {
-        const data = await fetchAccountDetails(user.id);
-        if (data) {
-          accountForm.reset({
-            account_name: data.account_name || "",
-            account_number: data.account_number || "",
-            bank_name: data.bank_name || "",
-          });
-        }
-      };
-      getAccount();
     }
-  }, [user, profileForm, accountForm]);
+  }, [user]);
+
+  // Populate account form when data loads
+  useEffect(() => {
+    if (existingAccount) {
+      accountForm.reset({
+        account_name: existingAccount.account_name || "",
+        account_number: existingAccount.account_number || "",
+        bank_name: existingAccount.bank_name || "",
+      });
+    }
+  }, [existingAccount]);
 
   const handleDeleteAccount = () => {
-    if (window.confirm("Delete bank details?")) {
-      deleteAccount(user.id, {
+    if (!existingAccount) return;
+    if (window.confirm("Remove your bank account details?")) {
+      deleteAccount(existingAccount.id, {
         onSuccess: () =>
           accountForm.reset({
             account_name: "",
@@ -107,6 +111,12 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
+      <div>
+        <h1 className="page-title">Profile Settings</h1>
+        <p className="page-subtitle">Manage your account information</p>
+      </div>
+
+      {/* Profile */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-4">
@@ -145,108 +155,144 @@ export default function ProfilePage() {
             >
               <Input {...profileForm.register("username")} />
             </FormField>
+            <FormField label="Email address">
+              <Input
+                value={user?.email || ""}
+                disabled
+                className="bg-ink-50 text-ink-500"
+              />
+            </FormField>
             <FormField
-              label="Phone"
+              label="Phone number"
               error={profileForm.formState.errors.phone?.message}
             >
-              <Input type="tel" {...profileForm.register("phone")} />
+              <Input
+                type="tel"
+                placeholder="+234 800 000 0000"
+                {...profileForm.register("phone")}
+              />
             </FormField>
-            <div className="flex justify-end">
+            <div className="flex justify-end pt-2">
               <Button type="submit" variant="primary" loading={updating}>
-                <User className="mr-2 h-4 w-4" /> Save changes
+                <User className="h-4 w-4" /> Save changes
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
+      {/* Bank account */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <CreditCard className="h-5 w-5" /> Bank Account
+            <CreditCard className="h-5 w-5 text-ink-500" /> Bank Account
           </CardTitle>
-          <CardDescription>Details for receiving payments</CardDescription>
+          <CardDescription>
+            {existingAccount
+              ? "Your bank details are visible to group members who owe you money."
+              : "Add your bank details so group members can pay you directly."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form
-            onSubmit={accountForm.handleSubmit((d) => addAccount(d))}
+            onSubmit={accountForm.handleSubmit((d) =>
+              saveAccount({ ...d, id: existingAccount?.id }),
+            )}
             className="space-y-4"
           >
             <FormField
-              label="Account Name"
+              label="Account name"
               error={accountForm.formState.errors.account_name?.message}
               required
             >
-              <Input {...accountForm.register("account_name")} />
+              <Input
+                placeholder="e.g. Chidi Nwosu"
+                {...accountForm.register("account_name")}
+              />
             </FormField>
             <FormField
-              label="Account Number"
+              label="Account number"
               error={accountForm.formState.errors.account_number?.message}
               required
             >
               <Input
-                type="text"
+                placeholder="0123456789"
+                maxLength={10}
                 inputMode="numeric"
                 {...accountForm.register("account_number")}
               />
             </FormField>
             <FormField
-              label="Bank Name"
+              label="Bank name"
               error={accountForm.formState.errors.bank_name?.message}
               required
             >
-              <Input {...accountForm.register("bank_name")} />
+              <Input
+                placeholder="e.g. GTBank, Access, Zenith"
+                {...accountForm.register("bank_name")}
+              />
             </FormField>
-            <div className="flex justify-end gap-3">
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={handleDeleteAccount}
-                loading={deletingAccount}
-              >
-                Delete
-              </Button>
-              <Button type="submit" variant="primary" loading={addingAccount}>
-                Save Account
+            <div className="flex justify-end gap-3 pt-2">
+              {existingAccount && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  loading={deletingAccount}
+                  onClick={handleDeleteAccount}
+                >
+                  Remove
+                </Button>
+              )}
+              <Button type="submit" variant="primary" loading={savingAccount}>
+                {existingAccount ? "Update account" : "Save account"}
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
+      {/* Change password */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" /> Security
+            <Shield className="h-5 w-5 text-ink-500" /> Change password
           </CardTitle>
+          <CardDescription>
+            Use a strong password with at least 8 characters
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form
-            onSubmit={passwordForm.handleSubmit((d) => changePassword(d))}
+            onSubmit={passwordForm.handleSubmit((d) => {
+              changePassword(d);
+              passwordForm.reset();
+            })}
             className="space-y-4"
           >
             <FormField
-              label="Current Password"
+              label="Current password"
               error={passwordForm.formState.errors.old_password?.message}
               required
             >
               <Input
                 type="password"
+                placeholder="••••••••"
                 {...passwordForm.register("old_password")}
               />
             </FormField>
             <FormField
-              label="New Password"
+              label="New password"
               error={passwordForm.formState.errors.new_password?.message}
               required
             >
               <Input
                 type="password"
+                placeholder="At least 8 characters"
                 {...passwordForm.register("new_password")}
               />
             </FormField>
             <FormField
-              label="Confirm New Password"
+              label="Confirm new password"
               error={
                 passwordForm.formState.errors.new_password_confirm?.message
               }
@@ -254,22 +300,30 @@ export default function ProfilePage() {
             >
               <Input
                 type="password"
+                placeholder="Repeat new password"
                 {...passwordForm.register("new_password_confirm")}
               />
             </FormField>
-            <div className="flex justify-end">
+            <div className="flex justify-end pt-2">
               <Button type="submit" variant="primary" loading={changingPwd}>
-                Update Password
+                Update password
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
+      {/* Sign out */}
       <Card className="border-rose-200">
-        <CardContent className="pt-6">
+        <CardHeader>
+          <CardTitle className="text-rose-700">Sign out</CardTitle>
+          <CardDescription>
+            Sign out of your Akant account on this device
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
           <Button variant="destructive" onClick={() => logout()}>
-            <LogOut className="mr-2 h-4 w-4" /> Sign Out
+            <LogOut className="h-4 w-4" /> Sign out
           </Button>
         </CardContent>
       </Card>

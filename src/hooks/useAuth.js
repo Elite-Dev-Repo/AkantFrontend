@@ -18,26 +18,36 @@ export function useMe() {
   });
 }
 
-// Utility function for the Profile Page useEffect
-export async function fetchAccountDetails(userId) {
-  if (!userId) return null;
-  try {
-    const { data } = await authApi.getAccountDetails(userId);
-    return data;
-  } catch (err) {
-    return null;
-  }
+export function useAccountDetails() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  return useQuery({
+    queryKey: ["account-details"],
+    queryFn: async () => {
+      const { data } = await authApi.getAccountDetails();
+      // Returns paginated list — grab first result
+      const results = data.results || data;
+      return Array.isArray(results) ? results : [];
+    },
+    enabled: isAuthenticated,
+  });
 }
 
-export function useAddAccountDetails() {
-  const { toast } = useToast();
+export function useSaveAccountDetails() {
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   return useMutation({
-    mutationFn: (data) => authApi.addAccountDetails(data),
+    mutationFn: async ({ id, ...payload }) => {
+      if (id) {
+        const { data } = await authApi.updateAccountDetails(id, payload);
+        return data;
+      }
+      const { data } = await authApi.createAccountDetails(payload);
+      return data;
+    },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["account"] });
-      toast({ title: "Success", description: "Account details added" });
+      qc.invalidateQueries({ queryKey: ["account-details"] });
+      toast({ title: "Account details saved!" });
     },
     onError: (err) => {
       toast({
@@ -50,14 +60,16 @@ export function useAddAccountDetails() {
 }
 
 export function useDeleteAccountDetails() {
-  const { toast } = useToast();
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   return useMutation({
-    mutationFn: (userId) => authApi.deleteAccountDetails(userId),
+    mutationFn: async (id) => {
+      await authApi.deleteAccountDetails(id);
+    },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["account"] });
-      toast({ title: "Deleted", description: "Bank details removed" });
+      qc.invalidateQueries({ queryKey: ["account-details"] });
+      toast({ title: "Bank details removed." });
     },
     onError: (err) => {
       toast({
@@ -69,7 +81,6 @@ export function useDeleteAccountDetails() {
   });
 }
 
-// ... Keep your existing useLogin, useRegister, useLogout, useUpdateProfile, useChangePassword here ...
 export function useLogin() {
   const { setAuth } = useAuthStore();
   const { toast } = useToast();
@@ -84,7 +95,6 @@ export function useLogin() {
     onSuccess: async (data) => {
       const { access, refresh } = data;
       setAuth(null, access, refresh);
-      // Fetch user profile
       try {
         const { data: meData } = await authApi.getMe();
         useAuthStore.getState().updateUser(meData.data);
